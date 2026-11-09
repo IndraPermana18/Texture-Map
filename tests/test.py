@@ -1,0 +1,65 @@
+from playwright.sync_api import sync_playwright
+import json
+errs=[]
+with sync_playwright() as p:
+    b=p.chromium.launch(); pg=b.new_page(viewport={'width':1920,'height':1080})
+    pg.on('console',lambda m: errs.append(m.text) if m.type=='error' else None); pg.on('pageerror',lambda e: errs.append(str(e)))
+    pg.goto('file:///home/claude/site/index.html'); pg.wait_for_timeout(800)
+    pg.screenshot(path='/home/claude/s0.png')
+    pg.click('[data-a=audiooff]'); pg.fill('#in-n','Budi'); pg.wait_for_timeout(300); pg.screenshot(path='/home/claude/s1.png')
+    pg.click('[data-a=start]'); pg.wait_for_timeout(7000); pg.screenshot(path='/home/claude/s2.png')
+    pg.click('[data-n=menu]'); pg.wait_for_timeout(500); pg.screenshot(path='/home/claude/s3.png')
+    st=lambda: pg.evaluate("JSON.stringify({d:ST.done,pr:ST.practice,q:ST.quizDone})")
+    # locked card
+    pg.click('[data-i="1"][data-a=card]'); pg.wait_for_timeout(300); print('locked modal:',pg.inner_text('.mbox')[:80]); pg.click('[data-a=close]')
+    for i in range(6):
+        pg.click(f'[data-a=card][data-i="{i}"]'); pg.wait_for_timeout(300)
+        for page in range(4): pg.click('#btn-next'); pg.wait_for_timeout(150)
+        if i in (0,3,5): pg.screenshot(path=f'/home/claude/m{i}p4pre.png')
+        assert pg.is_disabled('#btn-next')
+        # interact
+        if pg.query_selector('input[type=range]'): pg.evaluate("document.querySelector('input[type=range]').value=0.7;document.querySelector('input[type=range]').dispatchEvent(new Event('input',{bubbles:true}))")
+        else: pg.click('.tg')
+        pg.evaluate("document.querySelector('input[type=range]')&&0")
+        a=pg.evaluate(f"MAPS[{i}].q.a")
+        wrong=(a+1)%4; pg.click(f'[data-a=mq][data-k="{wrong}"]'); assert pg.is_disabled('#btn-next')
+        pg.click(f'[data-a=mq][data-k="{a}"]'); 
+        if i in (0,3,5): pg.screenshot(path=f'/home/claude/m{i}p4.png')
+        pg.click('#btn-next'); pg.wait_for_timeout(200)
+        if i==2: pg.screenshot(path='/home/claude/m2p5.png')
+        pg.click('#btn-fin'); pg.wait_for_timeout(300)
+        if i==0: pg.screenshot(path='/home/claude/fin.png'); print('after m0',st())
+        pg.click('.mbox [data-a=tomenu]'); pg.wait_for_timeout(300)
+        if i==0: pg.screenshot(path='/home/claude/menu2.png')
+    print('materi done',st())
+    pg.click('[data-n=praktik].pbtn' if False else 'button[data-n=praktik]'); pg.wait_for_timeout(300)
+    def nxt(): pg.click('#pnext'); pg.wait_for_timeout(150)
+    pg.click('[data-a=padd]'); pg.screenshot(path='/home/claude/p0.png'); nxt()
+    pg.click('[data-a=pmat]'); nxt(); pg.click('[data-a=ptab][data-t=shading]'); nxt()
+    for k,cs in (('base','sRGB'),('rough','Non-Color'),('metal','Non-Color')):
+        pg.click(f'[data-a=pnode][data-k={k}]')
+        pg.click(f'[data-d="out:{k}"]'); pg.click(f'[data-d="in:{k}"]')
+        if cs!='sRGB':
+            assert pg.is_disabled('#pnext'); pg.select_option(f'select[data-k={k}]',cs); pg.click(f'[data-d="out:{k}"]'); pg.click(f'[data-d="in:{k}"]')
+        if k=='rough': pg.screenshot(path='/home/claude/p4.png')
+        nxt()
+    pg.click('[data-a=pman]')
+    pg.evaluate("for(const [k,v] of [['metal',.95],['rough',.2]]){const e=document.querySelector(`[data-p=${k}]`);e.value=v;e.dispatchEvent(new Event('input',{bubbles:true}))}")
+    pg.screenshot(path='/home/claude/p6.png'); nxt()
+    pg.click('[data-a=prefl][data-k="1"]'); pg.click('[data-a=psave]'); pg.screenshot(path='/home/claude/p7.png'); nxt()
+    pg.wait_for_timeout(300); pg.click('[data-a=tokuis]'); pg.wait_for_timeout(300); print('practice',st())
+    pg.screenshot(path='/home/claude/q0.png')
+    for n in range(10):
+        # answer correctly for 8, wrong for 2
+        want = pg.evaluate(f"QUIZ[{n}].a"); ordr=pg.evaluate(f"Q.ord[{n}]")
+        k = ordr.index(want) if n<8 else ordr.index((want+1)%4)
+        pg.click(f'[data-a=qo][data-k="{k}"]'); pg.click('[data-a=qcheck]')
+        if n==0: pg.screenshot(path='/home/claude/q1.png')
+        pg.click('[data-a=qnext]'); pg.wait_for_timeout(100)
+    pg.wait_for_timeout(2200); pg.screenshot(path='/home/claude/h.png'); print('result',pg.evaluate("JSON.stringify(ST.quiz)"))
+    pg.reload(); pg.wait_for_timeout(500); print('after reload',st(), pg.evaluate("JSON.stringify(ST.quiz)"))
+    pg.click('[data-a=audiooff]'); pg.click('[data-a=audio]'); pg.screenshot(path='/home/claude/ap.png')
+    print('overflow',pg.evaluate("[document.documentElement.scrollWidth,innerWidth]"))
+    pg.click('[data-a=help]'); pg.click('[data-a=askreset]'); pg.click('[data-a=doreset]'); print('reset',st())
+    b.close()
+print('ERRORS',errs)
